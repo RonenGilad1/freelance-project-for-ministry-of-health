@@ -1,0 +1,90 @@
+
+
+USE [Chameleon_Proxy]
+GO
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+--CREATE PROCEDURE [dbo].[SP_Hospitalizations_tfosa] (@Hospital tinyint,@Unit varchar(max),@fromdate date , @todate date , @fromhour time , @tohour time  )
+--as begin
+
+
+
+
+
+
+
+------------פירוק ליחידות------
+--declare @UnitXml XML 
+--SET @UnitXml=cast(('<A>'+replace(@Unit,',' ,'</A><A>')+'</A>') AS XML)
+
+
+--SELECT convert(int,A.value('.','varchar(max)')) as [Unit] 
+--into #UnitTB
+--FROM @UnitXml.nodes('A') AS FN(A)
+
+
+--select Su.Unit,SU.Name,SU.Hospital
+--into #SU
+--from Chameleon.dbo.SystemUnits SU  
+--	inner join #UnitTB T on T.Unit=SU.Unit
+--where SU.Hospital=@Hospital 
+
+
+
+-------------------נוכחים על פי שעה ------------------------------------------------- 
+
+
+
+
+
+
+
+
+
+declare   @Unit varchar(max) , @Hospital tinyint  ,  @fromhour tinyint , @fromhour2 char , @tohour tinyint , @loopdate1 datetime , @loopdate2 datetime , @fromdate date --, @todate2 date   , @fromdate date , @todate date 
+
+ --set   @Unit = 15500385
+-- set  @Hospital = 28
+ set @fromhour = 6
+ set @fromhour2 = (case when  @fromhour < 10 then CONCAT( '0',@fromhour  ) else @fromhour end ) 
+ set @fromdate  = '2016-10-26' 
+ set  @loopdate1 = CONCAT( '2016-10-26'  ,' ' , @fromhour2   , ':00:00') 
+ set @loopdate2 = dateadd (HH , 1 ,@loopdate1 )   
+
+ select  t1.h_num_p , t1.Unit, t1.dt , month( t1.dt ) , year (t1.dt)  , DATEPART(hh, t1.dt) , DATEPART(DW, t1.dt), DAY(t1.dt) 
+--into #hosp		
+	from
+			(	select distinct( count  (h.Patient)) as h_num_p ,  h.Unit , @loopdate1 as 'dt'   ---/**, year (h.Release_Date) , year(h.Admission_Date) *// -- 
+				from Chameleon.dbo.Hospitalizations as H
+				where  -- h.Unit =  @Unit   and h.Hospital = @Hospital  
+				              --             and  
+										       h.Release_Date  >= @loopdate1  
+						   and     h.Admission_Date   <=  @loopdate1                        
+					group by   h.Unit 
+				union  all
+				select distinct( count  (e.Patient)) as h_num_p , e.Unit, @loopdate1  as 'dt' /**, year (e.Release_Time) , year(e.Admission_Date) **/ --
+				from Chameleon.dbo.EmergancyVisits as e 
+				where   -- e.Unit =  @Unit   and e.Hospital = @Hospital  and
+					 e.Release_Time <= @loopdate2  and e.Admission_Date >= @loopdate1 
+						
+				group by   e.Unit ) t1
+
+
+
+
+--select * from #hosp 
+
+
+
+--drop table #hosp
+
+--end
+
+--GO
+
+
