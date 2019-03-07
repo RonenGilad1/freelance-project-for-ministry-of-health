@@ -1,0 +1,84 @@
+
+
+
+---------   לידות שהחלו כרגילו והפכו לקיסרי עם פתיחה של 4 סמ לפחות . ------
+
+
+
+
+select distinct p.Id_Num,p.First_Name, p.Last_Name, 
+				cast( bd.Entry_Date as smalldatetime)  as 'Birth Date' , bd.Start_Mode, ta1.Answer_Text as 'Birth_start', 
+			  bd.Birth_Site,  ta2.Answer_Text as 'site',
+			   m2.Result, cast( m2.Entry_Date as smalldatetime) as 'Result_Time' 
+
+
+from Chameleon..EmergancyVisits ev 
+inner join Chameleon..Birth_Details bd on bd.Medical_Record = ev.Medical_Record
+inner join Chameleon..Patients p on p.Patient = ev.Patient 
+--inner join Chameleon..MonitoringParameters ? 
+
+inner join  (select  m.Result, ROW_NUMBER() over (partition by m.Medical_Record order by monitor_date desc) as rn, m.Entry_Date ,m.Medical_Record
+					from Chameleon.dbo.Monitor M  
+					where m.Parameter = 533 
+					and year( m.Entry_Date ) >=2016 
+					and m.Delete_Date is null
+					and cast(m.Result as numeric) >= 4                ) M2 on m2.Medical_Record = ev.Medical_Record and M2.rn = 1 
+
+inner join (select [Answer_Code] ,[Answer_Text] from  Chameleon..[TableAnswers] 
+			where  [Table_Code] = 1104 
+		 and Not_Active is null)  ta1 on bd.Start_Mode = ta1.Answer_Code 
+
+inner join (select [Answer_Code] ,[Answer_Text] from  Chameleon..[TableAnswers] 
+			where  [Table_Code] = 1105 
+		 and Not_Active is null)  ta2 on bd.Birth_Site = ta2.Answer_Code
+
+
+where year( bd.Entry_Date) >= 2016
+      and bd.Start_Mode in ( 104 , 1 ) 
+	  and bd.Birth_Site = 2 
+
+      and bd.Delete_Date is null 
+	  and ev.Delete_Date is null 
+
+
+order by p.Id_Num 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+ /***
+
+select  m.Result, ROW_NUMBER() over (partition by m.Medical_Record order by monitor_date desc) as rn, m.Entry_Date ,m.Medical_Record
+from Chameleon.dbo.Monitor M  
+where m.Parameter = 533 
+and year( m.Entry_Date ) >=2016 
+and cast (m.Result as numeric)  >= 4 
+and m.Delete_Date is null 
+order by m.Medical_Record
+
+
+ select Patient as "p1",Medical_Record,Monitor_Date,[533] as פתיחה,/*פתיחה*/[534] as "אחוז מחיקה", /*אחוז מחיקה*//*[538] as "אופי צוואר", /*אופי צוואר*/[537] as "מיקום צוואר" /*מיקום צוואר*/
+	,[536] as  "אורך צוואר",*/ /*אורך צוואר*/[535] as  SP /*ספינות*/
+--into #Monitor
+from (select Patient,Result,Parameter,Monitor_Date,Medical_Record
+	from
+		(SELECT  [Patient], Medical_Record,[Result],Monitor_Date,[Parameter]
+			--,ROW_NUMBER() over (partition by H.Medical_Record,parameter order by monitor_date desc) rn
+		  FROM --#Main H
+				 ---left join
+				  Chameleon.dbo.Monitor M --on h.Patient=m.Patient--M.Medical_Record=H.Medical_Record
+		  where m.Delete_Date is null  and parameter in (533,534,538,537,536,535) 
+		  --order by m.Entry_Date
+			  ) as a --where rn=1
+		) as SourceTable Pivot( max(result) for parameter in ([533],[534],[538],[537],[536],[535]))as PivotTable
+				order by PivotTable.Monitor_Date		
+**/			
