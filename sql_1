@@ -1,0 +1,57 @@
+------  הודעות קופצות ----
+select
+ distinct  
+cast(m.Message_Date as datetime) as  'm_date', 
+fromuser.Title + ' ' + fromUser.First_Name+' '+fromUser.Last_Name as 'sender',
+--coalesce (toUser.First_Name+' '+toUser.Last_Name,ta.Answer_Text) "הודעה נשלחה ל",
+m.Message_Text as 'mesedge_text'  , 
+fromUser.Code ,
+ms.Patient   ,-- ev.Patient , ev.Admission_Date 
+ev.Medical_Record , ev.Unit , su.Name,  --,
+--ev.Admission_Date , 
+p.Id_Num,
+bd.Entry_Date as 'birth_time' , 
+ds1.Description_Text as 'doctor_notes' ,
+ds2.Description_Text as 'meyaledet' 
+	
+--into #pm
+from Chameleon.dbo.messages m
+inner join Chameleon.dbo.MessagesSent ms on ms.Message_ID=m.Row_ID
+inner join Chameleon.dbo.users fromUser on fromUser.Code=m.Message_From
+--left join Chameleon.dbo.users toUser on toUser.Code=ms.Message_To
+left join Chameleon.dbo.MessagesSentUserSector msu on msu.Message_ID=ms.Message_ID
+left join Chameleon.dbo.TableAnswers ta on ta.Table_Code=398 and ta.Hospital=28 and ta.Answer_Code=msu.Sector
+
+inner join Chameleon.dbo.EmergancyVisits ev on ms.Patient = ev.Patient 
+inner join Chameleon.dbo.Patients p on p.Patient = ms.Patient 
+inner join Chameleon.dbo.SystemUnits su on su.Unit = ev.Unit
+inner join Chameleon.dbo.Birth_Details bd on ev.Medical_Record = bd.Medical_Record 
+left join Chameleon.dbo.DescriptionsArch ds1 on ds1.Medical_Record = bd.Medical_Record and ds1.Field =  1062   and ds1.Unit = 1499201
+left join Chameleon.dbo.DescriptionsArch ds2 on ds2.Medical_Record = bd.Medical_Record and ds2.Field =   1063  and ds2.Unit = 1499201
+
+
+where fromuser.code in ( 10835 /** נועה גלעד **/ , 7480 /**אלפרט**/ , 7584 /** פיורה **/ , 10756 /** ברנר **/ ,  7691 /** מרקוביץ **/ ) 
+      --and ms.Patient <> 5731 
+ and ev.Unit in ( 1499201 ) 
+	and ev.Delete_Date is null 
+	and year( ev.Admission_Date) = year( m.Message_Date)  
+	and bd.Delete_Date is null 
+	and bd.Entry_Date is not null 
+	and ds1.Delete_Date is  null 
+	and ds2.Delete_Date is  null 
+	--and 
+	
+
+group by cast(m.Message_Date as datetime),
+			fromuser.Title + ' ' + fromUser.First_Name+' '+fromUser.Last_Name,
+			m.Message_Text,
+			fromUser.Code ,
+			ms.Patient  ,-- ev.Patient , ev.Admission_Date 
+			ev.Medical_Record , ev.Unit , su.Name,  --,
+ev.Admission_Date , 
+			p.Id_Num,
+			bd.Entry_Date  , 
+			ds1.Description_Text  ,
+			ds2.Description_Text 
+
+order by p.Id_Num desc
