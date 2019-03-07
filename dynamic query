@@ -1,0 +1,95 @@
+USE [Chameleon_Proxy]
+GO
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+----exec Chameleon_Minhelet.[dbo].[SP_QE_MMSE] 29,'01/01/2016 00:00','12/30/2016',2
+--Create PROCEDURE [dbo].[SP_QE_MMSE] (@Hospital tinyint,@FromDate datetime,@ToDate datetime,@RN int)
+--AS BEGIN 
+
+
+declare @FromDate datetime,@ToDate datetime,@Hospital int,@Unit int,@RN int
+set @FromDate='01/01/2016 00:00'
+set @ToDate='12/30/2016'
+set @Hospital=28
+set @Unit=1551910
+set @RN=1 /*1מילוי ראשון בלבד, 2כל המילויים, 3מילוי אחרון בלבד*/
+
+declare @Field int
+set @Field=136   
+ --case @Hospital	when 19  then 0	when 20  then 0	when 22  then 0	when 23  then 0  
+	--						when 24  then 0	when 26  then 0	when 28  then 0	when 29  then 340
+	--						when 64  then 0	when 69  then 0	when 113 then 0	when 237 then 0  
+	--						when 238 then 0		when 234 then 0		end 
+   
+-------------- מילוי שאלון למטופלים -------------------------------
+select	Patient,Hospital,Unit,Medical_Record,Entry_Date,Entry_User,Execution_Row_ID,[סטטוס תזונתי],[טיפול],[הערות]
+--into #T		
+from (
+select Patient,Hospital,Unit,Entry_Date,Question_Text,Result,Execution_Row_ID,Medical_Record,Entry_User--,QuestionPerUnit_Row_ID
+from (
+select MR.Patient,MR.Hospital,MR.Unit,QE.Entry_Date,QE.Field,QER.Execution_Row_ID,QER.QuestionPerUnit_Row_ID,QE.Medical_Record,QE.Entry_User
+			,QP.Question_Text--,QER.Result_Combo,QER.Result_List,QER.Result_Date,QER.Result_Number,QER.Result_Text,QPU.TypeNumber
+		,case when QPU.TypeNumber=1 then (select QCU.Answer_Text 
+												from Chameleon.dbo.QuestionComboPerUnit QCU
+												where QCU.Field=QE.Field and QCU.Question=QPU.Question and QCU.Answer_Value=QER.Result_Combo
+														and QCU.Hospital=@Hospital) 
+				when QPU.TypeNumber=2 then (select stuff((select ','+isnull(QCU.Answer_Text,'') 
+											from Chameleon.dbo.QuestionComboPerUnit QCU
+											where QCU.Field=QE.Field and QCU.Question=QPU.Question and QCU.Hospital=@Hospital
+												AND CHARINDEX(','+CAST(QCU.Answer_Value AS VARCHAR(100))+',',','+ QER.Result_List+',')>0
+											FOR XML PATH ('')),1,1,''))  
+				else isnull(convert(varchar(50),QER.Result_Date),isnull(convert(varchar(20),QER.Result_Number),QER.Result_Text)) end as Result
+from  Chameleon..QuestionExecution QE
+		inner join Chameleon.dbo.QuestionExecutionResults QER on QER.Execution_Row_ID=QE.Row_ID
+		left join  Chameleon.dbo.QuestionPerUnit QPU on QER.QuestionPerUnit_Row_ID=QPU.Row_ID
+		inner join Chameleon.dbo.QuestionParameters QP on QP.Row_ID=QPU.Question
+		inner join Chameleon.dbo.MedicalRecords MR on MR.Medical_Record=QE.Medical_Record
+where QE.Delete_Date is null and  QE.Field=@Field and QE.Entry_Date between @FromDate and @ToDate
+) as A	
+ ) as SourceTable Pivot(max(Result) for Question_Text in ([סטטוס תזונתי],[טיפול],[הערות]))as PivotTable	
+
+----------------- פרוט מידע לאשפוז או קבלה למיון למטופל ----------------------------
+select 	C.Patient,C.Unit,C.Hospital,ISNULL(H.Aux_Code,ER.Aux_Code) as Aux_Code,C.Entry_User,Execution_Row_ID
+		,ISNULL(Admission_Medical_Record,ER.Medical_Record) as Admission_Medical_Record
+		,ISNULL(H.Admission_No,ER.Admission_No) Admission_No,C.Medical_Record
+		,ISNULL(H.Admission_Entry_Date,ER.Admission_Date) as Admission_Date
+		,ISNULL(H.Release_Date,ER.Release_Time) as Release_Date,C.Entry_Date 'תאריך ושעת תיעוד אוטומטי'
+		,[ציון],[מתוך],[הערות]
+		,ROW_NUMBER() over (partition By C.Patient,ISNULL(Admission_Medical_Record,ER.Medical_Record) order by C.Entry_Date asc) RnFirst		
+		,ROW_NUMBER() over (partition By C.Patient,ISNULL(Admission_Medical_Record,ER.Medical_Record) order by C.Entry_Date desc) RnLast
+into #T2
+ from #T as C
+	left join Chameleon_Reports.dbo.Hospitalizations H on H.Delete_Date is null and C.Medical_Record in (H.Admission_Medical_Record,H.FollowUp_Medical_REcord,H.Release_Medical_Record)
+												and H.Patient=C.Patient and H.Unit=C.Unit and H.Hospital=C.Hospital
+												--		and H.Admission_Date<=@ToDate and isnull(H.Release_Date,@FromDate)>=@FromDate /*מאושפזים בין תאריכים*/
+	left join Chameleon_Reports.dbo.EmergancyVisits ER on ER.Medical_Record=C.Medical_Record and ER.Delete_Date is null
+												and ER.Patient=C.Patient and ER.Unit=C.Unit and ER.Hospital=C.Hospital
+												--		and ER.Admission_Date<=@ToDate and isnull(ER.Release_Time,@FromDate)>=@FromDate /*התקבלו במיון בין תאריכים*/
+ where H.Admission_No is not null
+
+----------- פרוט מידע אדמינסטרטיבי נוסף --------------
+select SU.Name,P.First_Name,P.Last_Name,P.Id_Num
+		,DATEDIFF(YEAR,P.Birth_Date,Admission_Date) as AGE,P.Birth_Date,P.Gender_Text,P.Pay_Institute
+		,ISNULL(U.Title+' ','')+ U.First_Name+' '+ U.Last_Name as UName,C.*
+
+		
+from #T2 C
+	inner join Chameleon_Reports.dbo.V_Patients P on P.Patient=C.Patient
+	inner join Chameleon_Reports.dbo.SystemUnits SU on SU.Unit=C.Unit and SU.Hospital=C.Hospital
+	inner join Chameleon_Reports.dbo.Users U on U.Code=C.Entry_User			
+where P.Id_Num not like '999999%' and ((@RN=2)or (@RN=1 and C.RnFirst=1) or (@RN=3 and C.RnLast=1))
+	
+order by C.Unit,P.Id_Num,Admission_Medical_Record,RnFirst
+ 
+ drop table #T
+ drop table #T2
+ 
+--END
+
+--GO
