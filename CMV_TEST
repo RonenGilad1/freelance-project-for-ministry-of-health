@@ -1,0 +1,84 @@
+USE [Chameleon_Proxy]
+GO
+
+/****** Object:  StoredProcedure [dbo].[SP_CMV_PCR_TEST]    Script Date: 12/11/2018 12:26:21 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+--ALTER PROCEDURE [dbo].[SP_CMV_PCR_TEST] (  @FromDate date , @ToDate date , @Hospital tinyint , @Unit varchar(max) ) 
+--as begin
+
+--set @Hospital = 28 
+
+
+------------פירוק ליחידות------
+--declare @UnitXml XML 
+--SET @UnitXml=cast(('<A>'+replace(@Unit,',' ,'</A><A>')+'</A>') AS XML)
+
+
+--SELECT convert(int,A.value('.','varchar(max)')) as [Unit] 
+--into #UnitTB
+--FROM @UnitXml.nodes('A') AS FN(A)
+
+
+--select Su.Unit,SU.Name,SU.Hospital
+--into #SU
+--from Chameleon.dbo.SystemUnits SU  
+--	inner join #UnitTB T on T.Unit=SU.Unit
+--where SU.Hospital=@Hospital 
+
+
+
+
+
+
+select   cast( pnb.Birth_Time as date) as 'b_day' , lr.Result , cast( lr.Result_Date as date) as 'lr_date' , lr.Units , 
+      
+		 
+      p.Id_Num, p.First_Name + ' '+ p.Last_Name as 'nb_name' , p.Id_Num as 'nb_id_num' 
+
+
+from Chameleon..Newborns PNB 
+--inner join Chameleon..EmergancyVisits ev on ev.Medical_Record=pnb.Medical_Record
+-- join Chameleon..Patients p on p.Patient = ev.Patient 
+--inner join Chameleon..Patients p2 on p2.Patient = ( PNB.NewBorn_Medical_Record ) 
+inner join Chameleon..MedicalRecords mr on mr.Medical_Record = PNB.Medical_Record 
+inner join Chameleon..Patients p on p.Patient = mr.Patient 
+inner join Chameleon.dbo.SystemUnits SU on SU.Unit = Mr.Unit
+ --join Chameleon..Birth_Tests bt on bt.Medical_Record = ev.Medical_Record 
+-- left join [Chameleon].[dbo].[TableAnswers] ta on ta.Answer_Code = bt.CMV and ta.Table_Code = 1226 --and lr.Result_Entry_Date > ev.Admission_Date 
+
+--left join [Results].[dbo].[LabResults] lr on lr.Patient = pnb.NewBorn_Medical_Record and lr.Test_Code = 134000 
+
+outer apply ( select * from [Results].[dbo].[LabResults] l1 where l1.Patient = mr.Patient and l1.Result is not null   ) lr 
+
+where  Test_Code = 134000  
+
+
+    and   pnb.Delete_Date is null 
+     
+	  and lr.Delete_Date is null 
+		and lr.Delete_Date is null 
+	 and 	lr.Hospital = 28  
+	 and lr.Result not  like ( '%לא%') 
+
+	  --and cast( pnb.Birth_Time as date )    >=  @FromDate
+
+	  --and CAST( lr.Result_Date as date)  <= @ToDate 
+
+group by cast( pnb.Birth_Time as date)  , lr.Result , cast( lr.Result_Date as date)  , lr.Units , p.Id_Num, p.First_Name + ' '+ p.Last_Name 
+
+
+
+
+--end 
+
+
+
+--GO
