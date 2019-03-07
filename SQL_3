@@ -1,0 +1,335 @@
+USE [Chameleon_Proxy]
+
+GO
+
+ 
+
+/****** Object:  StoredProcedure [dbo].[sum_diataniot]    Script Date: 31/10/2018 15:48:59 ******/
+
+SET ANSI_NULLS ON
+
+GO
+
+ 
+
+SET QUOTED_IDENTIFIER ON
+
+GO
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ALTER PROCEDURE [dbo].[sum_diataniot] (@Unit varchar(max),@Hospital tinyint, @FromDate datetime, @ToDate datetime , @hosp nvarchar(max) , @stat nvarchar (max)   )---, @dail varchar )
+
+AS BEGIN
+
+ 
+
+ 
+
+---------------units---------
+
+ 
+
+declare @UnitXml AS XML
+
+SET @UnitXml=cast(('<A>'+replace(@Unit,',' ,'</A><A>')+'</A>') AS XML)
+
+ 
+
+ 
+
+---------- פרוק ה- @UnitXml -------------
+
+SELECT A.value('.','varchar(max)') as [Unit]
+
+into #Unit1
+
+FROM @UnitXml.nodes('A') AS FN(A)
+
+ 
+
+ 
+
+------------- יחידות  --------------
+
+select SU.Hospital,SU.Unit,SU.Name
+
+into #Unit
+
+from Chameleon.dbo.SystemUnits SU
+
+       inner join #Unit1 TS on TS.Unit=SU.Unit
+
+where SU.hospital=28 and SU.Is_Not_Active is null
+
+ 
+
+--   סטטוס -------
+
+ 
+
+declare @statxml AS XML
+
+SET @statxml=cast(('<A>'+replace(@stat,',' ,'</A><A>')+'</A>') AS XML)
+
+ 
+
+-------- פרוק - @statXml -------------
+
+SELECT A.value('.','varchar(max)') as [stat]
+
+into #stat
+
+FROM @statXml.nodes('A') AS FN(A)
+
+ 
+
+ 
+
+ 
+
+---   אשפוז -------
+
+ 
+
+declare @hospxml AS XML
+
+SET @hospxml=cast(('<B>'+replace(@hosp,',' ,'</B><B>')+'</B>') AS XML)
+
+ 
+
+---------- פרוק - @hospXml -------------
+
+SELECT B.value('.','varchar(max)') as [hospt]
+
+into #hosp
+
+FROM @hospXml.nodes('B') AS FN(B)
+
+ 
+
+ 
+
+ 
+
+-------סינון מטופלי ניסוי----------
+
+ 
+
+select P.Patient
+
+into #TestPatient
+
+from Chameleon..Patients p
+
+where p.Id_Num like '%999999%' OR P.First_Name='ניסוי' OR P.Last_Name='ניסוי'
+
+ 
+
+ 
+
+----תוכנית דיאליזה -----
+
+ 
+
+----declare @dailxml AS XML
+
+----SET @dailxml=cast(('<C>'+replace(@dail,',' ,'</C><C>')+'</C>') AS XML)
+
+ 
+
+------------ פרוק - @dailXml -------------
+
+----SELECT C.value('.','varchar(max)') as [dail]
+
+----into #dail
+
+----FROM @dailXml.nodes('C') AS FN(C)
+
+ 
+
+-------------main-----------------------------
+
+ 
+
+select Patient as Patient_p ,Hospital,Unit,Medical_Record,Entry_Date,Entry_User,[סטטוס תזונתי],[טיפול],[הערות],cast([מעקב הבא] as date) as [מעקב הבא] ,[לצורך] ---Execution_Row_ID,
+
+,Id_Num,First_Name + ' '+ Last_Name as "p_name",Name as "unit_name" ,UserName,Record_Date,Record_Closing_Date
+
+--,dialisys_boolin , dialisys_TEXT
+
+,InHosp , InHosp2 , dial_boolin2 , case when  dial_boolin2 = 1 then 'מטופל במכון דיאליזה' else 'אינו מטופל' end as  'dial_2' 
+
+, case when [סטטוס תזונתי] like '%תקין%'  then '1'
+
+          when [סטטוס תזונתי] like '%בינוני%'  then '2'
+
+          else  '3' end as 'statint'
+
+--,lr1.Test_Code,lr1.Test_Name,lr1.Test_Date
+
+into #T             
+
+from (
+
+              select Patient,Hospital,Unit,Entry_Date,Question_Text,Result,Medical_Record,Entry_User,Id_Num,First_Name,Last_Name,Name,UserName --Execution_Row_ID,
+
+              ,Record_Date,Record_Closing_Date
+
+              ,case when Record_Closing_Date is null then 1 else 0 end as 'InHosp' ,case when Record_Closing_Date is null then 'מאושפז' else  'לא מאושפז' end as 'InHosp2'
+
+              , case when Unit = 15500484 then 1 else 0 end as  'dial_boolin2' 
+
+              --,dialisys_boolin , dialisys_TEXT
+
+              --,QuestionPerUnit_Row_ID
+
+              from (
+
+              select MR.Patient,MR.Hospital,MR.Unit,QE.Entry_Date,QE.Field,QE.Medical_Record,QE.Entry_User --QER.QuestionPerUnit_Row_ID, QER.Execution_Row_ID,
+
+                                  ,QP.Question_Text,p.Id_Num,p.First_Name,p.Last_Name,su.Name,u.Title+' '+u.First_Name+' '+u.Last_Name as "UserName"
+
+                                  ,mr.Record_Date,mr.Record_Closing_Date
+
+                                  --,QER.Result_Combo,QER.Result_List,QER.Result_Date,QER.Result_Number,QER.Result_Text,QPU.TypeNumber
+
+                           ,case when QPU.TypeNumber=1 then (select QCU.Answer_Text
+
+                                                                                                from Chameleon.dbo.QuestionComboPerUnit QCU
+
+                                                                                                where QCU.Field=QE.Field and QCU.Question=QPU.Question and QCU.Answer_Value=QER.Result_Combo
+
+                                                                                                              and QCU.Hospital=28)
+
+                                         when QPU.TypeNumber=2 then (select stuff((select ','+isnull(QCU.Answer_Text,'')
+
+                                                                                         from Chameleon.dbo.QuestionComboPerUnit QCU
+
+                                                                                         where QCU.Field=QE.Field and QCU.Question=QPU.Question and QCU.Hospital=28
+
+                                                                                                AND CHARINDEX(','+CAST(QCU.Answer_Value AS VARCHAR(100))+',',','+ QER.Result_List+',')>0
+
+                                                                                         FOR XML PATH ('')),1,1,'')) 
+
+                                         else isnull(convert(varchar(50),QER.Result_Date),isnull(convert(varchar(20),QER.Result_Number),QER.Result_Text)) end as Result
+
+                                         --,case when  THD.Medical_Record is null then 0 else 1 end as "dialisys_boolin"
+
+                                         --,case when  THD.Medical_Record is null then 'ללא תוכנית דיאליזה' else 'מטופל בתוכנית' end as "dialisys_TEXT"
+
+              from  Chameleon..QuestionExecution QE
+
+                           inner join Chameleon.dbo.QuestionExecutionResults QER on QER.Execution_Row_ID=QE.Row_ID
+
+                           left join  Chameleon.dbo.QuestionPerUnit QPU on QER.QuestionPerUnit_Row_ID=QPU.Row_ID
+
+                           inner join Chameleon.dbo.QuestionParameters QP on QP.Row_ID=QPU.Question
+
+                           inner join Chameleon.dbo.MedicalRecords MR on MR.Medical_Record=QE.Medical_Record
+
+                           inner join Chameleon..Patients p on p.Patient=mr.Patient
+
+                           --inner join Chameleon..SystemUnits su on su.Unit=mr.Unit
+
+                         inner join #Unit su on su.Unit=mr.Unit
+
+                           inner join Chameleon..Users u on u.Code=qe.Entry_User
+
+                     --     left join (select distinct Medical_Record   from  Chameleon..TreatmentHemoDialysisPlan  where Delete_Date is null ) THD on thd.Medical_Record = qe.Medical_Record -- and thd.Delete_Date is null
+
+              where QE.Delete_Date is null and  QE.Field=136  and QE.Entry_Date between @FromDate and @ToDate
+
+                     and not exists (select 1 from #TestPatient TP where TP.Patient=p.Patient)
+
+                                                                                                                                                                                                )  as A     
+
+              ) as SourceTable Pivot(max(Result) for Question_Text in ([סטטוס תזונתי],[טיפול],[הערות],[מעקב הבא],[לצורך]))as PivotTable 
+
+ 
+
+-----------------------------------בדיקות מעבדה----------------------------------
+
+ 
+
+select distinct *
+
+into #lab
+
+       from (
+
+                          
+
+ 
+
+ 
+
+                           select Patient , [42502] as [ MICROALBUMIN- U 24h]
+
+ 
+
+                           ,[23600] as [PREALBUMIN] ,[35000] as "MICROALBUMIN/CREAT" ,[38300] as "ALBUMIN- BODY FLUID_1" ,[23501] as "ALBUMIN (BY EP)",[23507] as "ALBUMIN %"
+
+                ,[46700] as "MICROALBUMIN-U SAMP" ,[42500] as "MICROALBUMIN- U 24h",[950060] as "ALBUMIN- BODY FLUID_2",[23506] as "ALBUMIN/GLOBULIN" ,[21100] as "ALBUMIN"
+
+                           , [45401] as "POTASSIUM-U 24h CALC" , [41900] as "POTASSIUM- U SAMPLE"  , [25402] as "POTASSIUM"  , [20600] as "POTASSIUM_1"
+
+                           --, [45401] as "POTASSIUM-U 24h CALC" ,45401
+
+                         , [8694500] as "7-DEHYDROCHOLESTEROL" , [35800] as "LDL CHOLESTEROL -dir"  ,[19924] as "CHOLESTEROL-BF" ,[21400] as "CHOLESTEROL- HDL_1"
+
+                           ,[21500] as "CHOLESTEROL-LDL calc" , [520706] as "NON-HDL_CHOLESTEROL"  , [950272] as "CHOLESTEROL BODY FLUID"  , [21200] as "CHOLESTEROL" 
+
+                            , [33300] as "CHOLESTEROL/ HDL"
+
+                           ,[20900] as "PHOSPHORUS" ,[42200] as "PHOSPHORUS-U SAMPLE"  --40802       PHOSPHORUS- U 24h 40800    PHOSPHORUS- U 24h
+
+ 
+
+ 
+
+                                  from 
+
+                                   ( select distinct *
+
+                                         from
+
+                         (
+
+                                         (select distinct lr.Test_Code,lr.Test_Date,lr.Patient , lr.Result --lr.Test_Name ,
+
+                                                                       ,ROW_NUMBER () over (partition by lr.patient ,lr.Test_Code order by lr.Result_Date desc) RN
+
+                                            from Results..LabResults lr
+
+                                                where ISNUMERIC( lr.Result) = 1        and lr.Delete_Date is null      and lr.Result is not null
+
+                                                       and lr.Test_Code in (42502 ,23600 ,35000,38300,23501,23507,46700,42500,950060,23506,21100 ,45401 ,20900,42200, 40802,40800
+
+                                                                                           ,41900,25402,20600,8694500,35800,19924,21400,21500,520706, 950272, 21200, 33300)))as a
+
+                                 
+
+                                                                                                                                                                
+
+                                                       where a.RN=1 ) as SourceTable
+
+ 
+
+                     Pivot (max(SourceTable.result)  for SourceTable.test_code in ([42502],[23600],[35000],[38300],[23501],[23507],[46700]
+
+                                                                              ,[42500],[950060],[23506],[21100] ,[ 45401], [41900] , [25402], [20600], [45401],[8694500], [35800],[19924],[21400],[21500]
+
+                                                                               , [520706], [950272], [21200], [33300] ,[20900],[42200], [40802],[40800] ))as PivotTable  
+
+ 
+
+                                                                                  ) as lpv
