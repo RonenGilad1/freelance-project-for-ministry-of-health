@@ -1,0 +1,58 @@
+USE [Chameleon_Proxy]
+GO
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+--CREATE PROCEDURE [dbo].[SP_PMC_TEST] (@Hospital tinyint,@Unit varchar(max),@fromdate date , @todate date   )
+--as begin
+
+
+------------פירוק ליחידות------
+--declare @UnitXml XML 
+--SET @UnitXml=cast(('<A>'+replace(@Unit,',' ,'</A><A>')+'</A>') AS XML)
+
+
+--SELECT convert(int,A.value('.','varchar(max)')) as [Unit] 
+--into #UnitTB
+--FROM @UnitXml.nodes('A') AS FN(A)
+
+
+--select Su.Unit,SU.Name,SU.Hospital
+--into #SU
+--from Chameleon.dbo.SystemUnits SU  
+--	inner join #UnitTB T on T.Unit=SU.Unit
+--where SU.Hospital=@Hospital 
+
+
+
+
+
+
+select ev.Patient,
+         ---p.Id_Num, p.First_Name + ' '+ p.Last_Name as p_name ,  
+       ev.Admission_Date, ev.Release_Time,  --, pnb.NewBorn_Medical_Record , pnb.Entry_Date
+      p2.Id_Num, p2.First_Name + ' '+ p2.Last_Name as nb_name, 
+ 
+ --,bt.CMV ,bt.CMV_Date ,bt.CMV_Pregnancy_Age , ta.Answer_Text 
+  lr.Result
+
+from Chameleon..Patient_Newborns PNB 
+inner join Chameleon..EmergancyVisits ev on ev.Medical_Record=pnb.Medical_Record
+ --join Chameleon..Patients p on p.Patient = ev.Patient 
+ join Chameleon..Patients p2 on p2.Patient = PNB.NewBorn_Medical_Record 
+ --join Chameleon..Birth_Tests bt on bt.Medical_Record = ev.Medical_Record 
+-- left join [Chameleon].[dbo].[TableAnswers] ta on ta.Answer_Code = bt.CMV and ta.Table_Code = 1226 --and lr.Result_Entry_Date > ev.Admission_Date 
+
+left join [Results].[dbo].[LabResults] lr on lr.Patient = pnb.NewBorn_Medical_Record and lr.Test_Code = 134000 
+
+where  ev.Delete_Date is null and pnb.Delete_Date is null 
+       and lr.Result is not null 
+		and lr.Delete_Date is null 
+	  and 	ev.Hospital=28 
+
+order by ev.Patient 
